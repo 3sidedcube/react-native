@@ -32,6 +32,9 @@ void TextAttributes::apply(TextAttributes textAttributes) {
   // Font
   fontFamily = !textAttributes.fontFamily.empty() ? textAttributes.fontFamily
                                                   : fontFamily;
+  fontCondensed = textAttributes.fontCondensed.hasValue() ?
+      ? textAttributes.fontCondensed
+      : fontCondensed;
   fontSize =
       !std::isnan(textAttributes.fontSize) ? textAttributes.fontSize : fontSize;
   fontSizeMultiplier = !std::isnan(textAttributes.fontSizeMultiplier)

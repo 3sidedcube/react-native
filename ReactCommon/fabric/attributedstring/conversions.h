@@ -500,6 +500,9 @@ inline folly::dynamic toDynamic(const TextAttributes &textAttributes) {
   if (!textAttributes.fontFamily.empty()) {
     _textAttributes("fontFamily", textAttributes.fontFamily);
   }
+  if (textAttributes.fontCondensed.has_value()) {
+    _textAttributes("fontCondensed", *textAttributes.fontCondensed);
+  }
   if (!std::isnan(textAttributes.fontSize)) {
     _textAttributes("fontSize", textAttributes.fontSize);
   }

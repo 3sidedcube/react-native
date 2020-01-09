@@ -39,6 +39,11 @@ static TextAttributes convertRawProp(
       defaultTextAttributes.opacity);
 
   // Font
+  textAttributes.fontCondensed = convertRawProp(
+      rawProps,
+      "fontCondensed",
+      sourceTextAttributes.fontCondensed,
+      defaultTextAttributes.fontCondensed);
   textAttributes.fontFamily = convertRawProp(
       rawProps,
       "fontFamily",

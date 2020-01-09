@@ -49,6 +49,7 @@ inline bool areTextAttributesEquivalentLayoutWise(
   // attributes that affect only a decorative aspect of displayed text (like
   // colors).
   return std::tie(
+             lhs.fontCondensed,
              lhs.fontFamily,
              lhs.fontWeight,
              lhs.fontStyle,
@@ -56,6 +57,7 @@ inline bool areTextAttributesEquivalentLayoutWise(
              lhs.allowFontScaling,
              lhs.alignment) ==
       std::tie(
+             rhs.fontCondensed,
              rhs.fontFamily,
              rhs.fontWeight,
              rhs.fontStyle,
@@ -74,6 +76,7 @@ inline size_t textAttributesHashLayoutWise(
   // `areTextAttributesEquivalentLayoutWise` mentions.
   return folly::hash::hash_combine(
       0,
+      textAttributes.fontCondensed,
       textAttributes.fontFamily,
       textAttributes.fontSize,
       textAttributes.fontSizeMultiplier,

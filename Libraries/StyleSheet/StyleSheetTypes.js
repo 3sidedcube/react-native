@@ -598,6 +598,7 @@ export type ____FontWeight_Internal =
 export type ____TextStyle_Internal = $ReadOnly<{|
   ...$Exact<____ViewStyle_Internal>,
   color?: ColorValue,
+  fontCondensed?: boolean,
   fontFamily?: string,
   fontSize?: number,
   fontStyle?: 'normal' | 'italic',

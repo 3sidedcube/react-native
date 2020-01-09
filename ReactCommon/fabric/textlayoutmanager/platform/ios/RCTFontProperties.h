@@ -28,6 +28,7 @@ typedef NS_OPTIONS(NSInteger, RCTFontVariant) {
 
 struct RCTFontProperties {
   NSString *family = nil;
+  NSNumber *condensed = nil;
   CGFloat size = NAN;
   UIFontWeight weight = NAN;
   RCTFontStyle style = RCTFontStyleUndefined;

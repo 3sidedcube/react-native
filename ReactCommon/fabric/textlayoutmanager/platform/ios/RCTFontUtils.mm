@@ -60,6 +60,13 @@ static RCTFontStyle RCTGetFontStyle(UIFont *font)
   return RCTFontStyleNormal;
 }
 
+static BOOL RCTGetFontCondensed(UIFont *font)
+{
+  NSDictionary *traits = [font.fontDescriptor objectForKey:UIFontDescriptorTraitsAttribute];
+  UIFontDescriptorSymbolicTraits symbolicTraits = [traits[UIFontSymbolicTrait] unsignedIntValue];
+  return (symbolicTraits & UIFontDescriptorTraitCondensed) != 0;
+}
+
 static NSArray *RCTFontFeatures(RCTFontVariant fontVariant)
 {
   // FIXME:
@@ -111,6 +118,7 @@ UIFont *RCTFontWithFontProperties(RCTFontProperties fontProperties)
 
   assert(!isnan(fontProperties.sizeMultiplier));
   CGFloat effectiveFontSize = fontProperties.sizeMultiplier * fontProperties.size;
+  BOOL condensed = fontProperties.condensed ? fontProperties.condensed.boolValue : false;
   UIFont *font;
   if ([fontProperties.family isEqualToString:defaultFontProperties.family]) {
     // Handle system font as special case. This ensures that we preserve
@@ -134,7 +142,7 @@ UIFont *RCTFontWithFontProperties(RCTFontProperties fontProperties)
       for (NSString *name in fontNames) {
         UIFont *fontMatch = [UIFont fontWithName:name size:effectiveFontSize];
 
-        if (RCTGetFontStyle(fontMatch) != fontProperties.style) {
+        if (RCTGetFontStyle(fontMatch) != fontProperties.style || RCTGetFontCondensed(fontMatch) != condensed) {
           continue;
         }
 

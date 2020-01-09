@@ -57,9 +57,14 @@ inline static UIFontWeight RCTUIFontWeightFromInteger(NSInteger fontWeight)
 inline static UIFont *RCTEffectiveFontFromTextAttributes(const TextAttributes &textAttributes)
 {
   NSString *fontFamily = [NSString stringWithCString:textAttributes.fontFamily.c_str() encoding:NSUTF8StringEncoding];
+    
+  NSNumber *fontCondensed = textAttributes.fontCondensed.hasValue()
+      ? [NSNumber numberWithBool: (BOOL)textAttributes.fontCondensed.value()]
+      : nil;
 
   RCTFontProperties fontProperties;
   fontProperties.family = fontFamily;
+  fontProperties.condensed = fontCondensed;
   fontProperties.size = textAttributes.fontSize;
   fontProperties.style = textAttributes.fontStyle.hasValue()
       ? RCTFontStyleFromFontStyle(textAttributes.fontStyle.value())
