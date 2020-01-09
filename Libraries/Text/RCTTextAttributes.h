@@ -36,6 +36,7 @@ extern NSString *const RCTTextAttributesTagAttributeName;
 @property (nonatomic, copy, nullable) NSString *fontStyle;
 @property (nonatomic, copy, nullable) NSArray<NSString *> *fontVariant;
 @property (nonatomic, assign) BOOL allowFontScaling;
+@property (nonatomic, assign) BOOL fontCondensed;
 @property (nonatomic, assign) CGFloat letterSpacing;
 // Paragraph Styles
 @property (nonatomic, assign) CGFloat lineHeight;

@@ -166,6 +166,7 @@ static UIFont *cachedSystemFont(CGFloat size, RCTFontWeight weight)
                   withFamily:[RCTConvert NSString:json[@"fontFamily"]]
                         size:[RCTConvert NSNumber:json[@"fontSize"]]
                       weight:[RCTConvert NSString:json[@"fontWeight"]]
+                   condensed:[RCTConvert BOOL:json[@"fontCondensed"]]
                        style:[RCTConvert NSString:json[@"fontStyle"]]
                      variant:[RCTConvert NSStringArray:json[@"fontVariant"]]
              scaleMultiplier:1];
@@ -239,6 +240,7 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
             withFamily:(NSString *)family
                   size:(NSNumber *)size
                 weight:(NSString *)weight
+             condensed:(BOOL)condensed
                  style:(NSString *)style
                variant:(NSArray<RCTFontVariantDescriptor *> *)variant
        scaleMultiplier:(CGFloat)scaleMultiplier
@@ -257,7 +259,7 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
   RCTFontWeight fontWeight = defaultFontWeight;
   NSString *familyName = defaultFontFamily;
   BOOL isItalic = NO;
-  BOOL isCondensed = NO;
+  BOOL isCondensed = condensed;
 
   if (font) {
     familyName = font.familyName ?: defaultFontFamily;
@@ -361,22 +363,22 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
 
 + (UIFont *)updateFont:(UIFont *)font withFamily:(NSString *)family
 {
-  return [self updateFont:font withFamily:family size:nil weight:nil style:nil variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:family size:nil weight:nil condensed:false style:nil variant:nil scaleMultiplier:1];
 }
 
 + (UIFont *)updateFont:(UIFont *)font withSize:(NSNumber *)size
 {
-  return [self updateFont:font withFamily:nil size:size weight:nil style:nil variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:nil size:size weight:nil condensed:false style:nil variant:nil scaleMultiplier:1];
 }
 
 + (UIFont *)updateFont:(UIFont *)font withWeight:(NSString *)weight
 {
-  return [self updateFont:font withFamily:nil size:nil weight:weight style:nil variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:nil size:nil weight:weight condensed:false style:nil variant:nil scaleMultiplier:1];
 }
 
 + (UIFont *)updateFont:(UIFont *)font withStyle:(NSString *)style
 {
-  return [self updateFont:font withFamily:nil size:nil weight:nil style:style variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:nil size:nil weight:nil condensed:false style:style variant:nil scaleMultiplier:1];
 }
 
 @end

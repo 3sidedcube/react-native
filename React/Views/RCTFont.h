@@ -23,7 +23,7 @@ RCT_EXTERN BOOL RCTHasFontHandlerSet(void);
 @interface RCTFont : NSObject
 
 /**
- * Update a font with a given font-family, size, weight and style.
+ * Update a font with a given font-family, size, weight, condensed and style.
  * If parameters are not specified, they'll be kept as-is.
  * If font is nil, the default system font of size 14 will be used.
  */
@@ -31,6 +31,7 @@ RCT_EXTERN BOOL RCTHasFontHandlerSet(void);
             withFamily:(NSString *)family
                   size:(NSNumber *)size
                 weight:(NSString *)weight
+             condensed:(BOOL)condensed
                  style:(NSString *)style
                variant:(NSArray<NSString *> *)variant
        scaleMultiplier:(CGFloat)scaleMultiplier;

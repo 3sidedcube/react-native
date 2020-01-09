@@ -24,6 +24,7 @@ NSString *const RCTTextAttributesTagAttributeName = @"RCTTextAttributesTagAttrib
     _lineHeight = NAN;
     _textDecorationStyle = NSUnderlineStyleSingle;
     _fontSizeMultiplier = NAN;
+    _fontCondensed = false;
     _maxFontSizeMultiplier = NAN;
     _alignment = NSTextAlignmentNatural;
     _baseWritingDirection = NSWritingDirectionNatural;
@@ -54,6 +55,7 @@ NSString *const RCTTextAttributesTagAttributeName = @"RCTTextAttributesTagAttrib
   _fontWeight = textAttributes->_fontWeight ?: _fontWeight;
   _fontStyle = textAttributes->_fontStyle ?: _fontStyle;
   _fontVariant = textAttributes->_fontVariant ?: _fontVariant;
+  _fontCondensed = textAttributes->_fontCondensed ?: _fontCondensed;
   _allowFontScaling = textAttributes->_allowFontScaling || _allowFontScaling;  // *
   _letterSpacing = !isnan(textAttributes->_letterSpacing) ? textAttributes->_letterSpacing : _letterSpacing;
 
@@ -197,6 +199,7 @@ NSString *const RCTTextAttributesTagAttributeName = @"RCTTextAttributesTagAttrib
                   withFamily:_fontFamily
                         size:@(isnan(_fontSize) ? 0 : _fontSize)
                       weight:_fontWeight
+                   condensed:_fontCondensed
                        style:_fontStyle
                      variant:_fontVariant
              scaleMultiplier:self.effectiveFontSizeMultiplier];
@@ -288,6 +291,7 @@ NSString *const RCTTextAttributesTagAttributeName = @"RCTTextAttributesTagAttrib
     RCTTextAttributesCompareStrings(_fontWeight) &&
     RCTTextAttributesCompareObjects(_fontStyle) &&
     RCTTextAttributesCompareObjects(_fontVariant) &&
+    RCTTextAttributesCompareOthers(_fontCondensed) &&
     RCTTextAttributesCompareOthers(_allowFontScaling) &&
     RCTTextAttributesCompareFloats(_letterSpacing) &&
     // Paragraph Styles
