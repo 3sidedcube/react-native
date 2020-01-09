@@ -1,12 +1,19 @@
-#import "RCTInspectorPackagerConnection.h"
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#import <React/RCTInspectorPackagerConnection.h>
 
 #if RCT_DEV
 
-#import "RCTDefines.h"
-#import "RCTInspector.h"
-#import "RCTLog.h"
-#import "RCTSRWebSocket.h"
-#import "RCTUtils.h"
+#import <React/RCTDefines.h>
+#import <React/RCTInspector.h>
+#import <React/RCTLog.h>
+#import <React/RCTSRWebSocket.h>
+#import <React/RCTUtils.h>
 
 // This is a port of the Android impl, at
 // ReactAndroid/src/main/java/com/facebook/react/devsupport/InspectorPackagerConnection.java
@@ -14,12 +21,17 @@
 
 const int RECONNECT_DELAY_MS = 2000;
 
+@implementation RCTBundleStatus
+@end
+
 @interface RCTInspectorPackagerConnection () <RCTSRWebSocketDelegate> {
   NSURL *_url;
   NSMutableDictionary<NSString *, RCTInspectorLocalConnection *> *_inspectorConnections;
   RCTSRWebSocket *_webSocket;
+  dispatch_queue_t _jsQueue;
   BOOL _closed;
   BOOL _suppressConnectionErrors;
+  RCTBundleStatusProvider _bundleStatusProvider;
 }
 @end
 
@@ -45,14 +57,14 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   if (self = [super init]) {
     _url = url;
     _inspectorConnections = [NSMutableDictionary new];
+    _jsQueue = dispatch_queue_create("com.facebook.react.WebSocketExecutor", DISPATCH_QUEUE_SERIAL);
   }
   return self;
 }
 
-- (void)sendOpenEvent:(NSString *)pageId
+- (void)setBundleStatusProvider:(RCTBundleStatusProvider)bundleStatusProvider
 {
-  NSDictionary<NSString *, id> *payload = makePageIdPayload(pageId);
-  [self sendEvent:@"open" payload:payload];
+  _bundleStatusProvider = bundleStatusProvider;
 }
 
 - (void)handleProxyMessage:(NSDictionary<NSString *, id> *)message
@@ -72,6 +84,13 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   }
 }
 
+- (void)sendEventToAllConnections:(NSString *)event
+{
+  for (NSString *pageId in _inspectorConnections) {
+    [_inspectorConnections[pageId] sendMessage:event];
+  }
+}
+
 - (void)closeAllConnections
 {
   for (NSString *pageId in _inspectorConnections){
@@ -83,9 +102,11 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 - (void)handleConnect:(NSDictionary *)payload
 {
   NSString *pageId = payload[@"pageId"];
-  if (_inspectorConnections[pageId]) {
+  RCTInspectorLocalConnection *existingConnection = _inspectorConnections[pageId];
+  if (existingConnection) {
     [_inspectorConnections removeObjectForKey:pageId];
-    RCTLogError(@"Already connected: %@", pageId);
+    [existingConnection disconnect];
+    RCTLogWarn(@"Already connected: %@", pageId);
     return;
   }
 
@@ -119,7 +140,10 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   NSString *wrappedEvent = payload[@"wrappedEvent"];
   RCTInspectorLocalConnection *inspectorConnection = _inspectorConnections[pageId];
   if (!inspectorConnection) {
-    RCTLogError(@"Not connected: %@", pageId);
+    RCTLogWarn(
+      @"Not connected to page: %@ , failed trying to handle event: %@",
+      pageId,
+      wrappedEvent);
     return;
   }
   [inspectorConnection sendMessage:wrappedEvent];
@@ -129,10 +153,24 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 {
   NSArray<RCTInspectorPage *> *pages = [RCTInspector pages];
   NSMutableArray *array = [NSMutableArray arrayWithCapacity:pages.count];
+
+  RCTBundleStatusProvider statusProvider = _bundleStatusProvider;
+  RCTBundleStatus *bundleStatus = statusProvider == nil
+    ? nil
+    : statusProvider();
+
   for (RCTInspectorPage *page in pages) {
     NSDictionary *jsonPage = @{
       @"id": [@(page.id) stringValue],
       @"title": page.title,
+      @"app": [[NSBundle mainBundle] bundleIdentifier],
+      @"vm": page.vm,
+      @"isLastBundleDownloadSuccess": bundleStatus == nil
+        ? [NSNull null]
+        : @(bundleStatus.isLastBundleDownloadSuccess),
+      @"bundleUpdateTimestamp": bundleStatus == nil
+        ? [NSNull null]
+        : @((long)bundleStatus.bundleUpdateTimestamp * 1000),
     };
     [array addObject:jsonPage];
   }
@@ -159,19 +197,19 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 }
 
 // analogous to InspectorPackagerConnection.Connection.onFailure(...)
-- (void)webSocket:(RCTSRWebSocket *)webSocket didFailWithError:(NSError *)error
+- (void)webSocket:(__unused RCTSRWebSocket *)webSocket didFailWithError:(NSError *)error
 {
   if (_webSocket) {
     [self abort:@"Websocket exception"
       withCause:error];
   }
-  if (!_closed) {
+  if (!_closed && [error code] != ECONNREFUSED) {
     [self reconnect];
   }
 }
 
 // analogous to InspectorPackagerConnection.Connection.onMessage(...)
-- (void)webSocket:(RCTSRWebSocket *)webSocket didReceiveMessage:(id)opaqueMessage
+- (void)webSocket:(__unused RCTSRWebSocket *)webSocket didReceiveMessage:(id)opaqueMessage
 {
   // warn but don't die on unrecognized messages
   if (![opaqueMessage isKindOfClass:[NSString class]]) {
@@ -192,15 +230,20 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 }
 
 // analogous to InspectorPackagerConnection.Connection.onClosed(...)
-- (void)webSocket:(RCTSRWebSocket *)webSocket didCloseWithCode:(NSInteger)code
-                                                        reason:(NSString *)reason
-                                                      wasClean:(BOOL)wasClean
+- (void)webSocket:(__unused RCTSRWebSocket *)webSocket didCloseWithCode:(__unused NSInteger)code
+                                                        reason:(__unused NSString *)reason
+                                                      wasClean:(__unused BOOL)wasClean
 {
   _webSocket = nil;
   [self closeAllConnections];
   if (!_closed) {
     [self reconnect];
   }
+}
+
+- (bool)isConnected
+{
+  return _webSocket != nil;
 }
 
 - (void)connect
@@ -210,10 +253,11 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
     return;
   }
 
-  // The corresopnding android code has a lot of custom config options for
+  // The corresponding android code has a lot of custom config options for
   // timeouts, but it appears the iOS RCTSRWebSocket API doesn't have the same
   // implemented options.
   _webSocket = [[RCTSRWebSocket alloc] initWithURL:_url];
+  [_webSocket setDelegateDispatchQueue:_jsQueue];
   _webSocket.delegate = self;
   [_webSocket open];
 }
@@ -250,7 +294,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 - (void)sendToPackager:(NSDictionary *)messageObject
 {
   __weak RCTInspectorPackagerConnection *weakSelf = self;
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+  dispatch_async(_jsQueue, ^{
     RCTInspectorPackagerConnection *strongSelf = weakSelf;
     if (strongSelf && !strongSelf->_closed) {
       NSError *error;
@@ -267,7 +311,10 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
 - (void)abort:(NSString *)message
     withCause:(NSError *)cause
 {
-  RCTLogWarn(@"Error occurred, shutting down websocket connection: %@ %@", message, cause);
+  // Don't log ECONNREFUSED at all; it's expected in cases where the server isn't listening.
+  if (![cause.domain isEqual:NSPOSIXErrorDomain] || cause.code != ECONNREFUSED) {
+    RCTLogInfo(@"Error occurred, shutting down websocket connection: %@ %@", message, cause);
+  }
 
   [self closeAllConnections];
   [self disposeWebSocket];

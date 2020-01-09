@@ -1,18 +1,16 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
-#import "RCTReconnectingWebSocket.h"
+#import <React/RCTReconnectingWebSocket.h>
 
 #import <React/RCTConvert.h>
 #import <React/RCTDefines.h>
 
-#import "RCTSRWebSocket.h"
+#import <React/RCTSRWebSocket.h>
 
 #if RCT_DEV // Only supported in dev mode
 
@@ -24,14 +22,18 @@
   RCTSRWebSocket *_socket;
 }
 
-@synthesize delegate = _delegate;
-
-- (instancetype)initWithURL:(NSURL *)url
+- (instancetype)initWithURL:(NSURL *)url queue:(dispatch_queue_t)queue
 {
   if (self = [super init]) {
     _url = url;
+    _delegateDispatchQueue = queue;
   }
   return self;
+}
+
+- (instancetype)initWithURL:(NSURL *)url
+{
+  return [self initWithURL:url queue:dispatch_get_main_queue()];
 }
 
 - (void)send:(id)data
@@ -44,7 +46,7 @@
   [self stop];
   _socket = [[RCTSRWebSocket alloc] initWithURL:_url];
   _socket.delegate = self;
-
+  [_socket setDelegateDispatchQueue:_delegateDispatchQueue];
   [_socket open];
 }
 
@@ -57,29 +59,36 @@
 
 - (void)webSocket:(RCTSRWebSocket *)webSocket didReceiveMessage:(id)message
 {
-  if (_delegate) {
-    [_delegate webSocket:webSocket didReceiveMessage:message];
-  }
+  [_delegate reconnectingWebSocket:self didReceiveMessage:message];
 }
 
 - (void)reconnect
 {
   __weak RCTSRWebSocket *socket = _socket;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-    // Only reconnect if the observer wasn't stoppped while we were waiting
-    if (socket) {
-      [self start];
+    [self start];
+    if (!socket) {
+      [self reconnect];
     }
   });
 }
 
+- (void)webSocketDidOpen:(RCTSRWebSocket *)webSocket
+{
+  [_delegate reconnectingWebSocketDidOpen:self];
+}
+
 - (void)webSocket:(RCTSRWebSocket *)webSocket didFailWithError:(NSError *)error
 {
-  [self reconnect];
+  [_delegate reconnectingWebSocketDidClose:self];
+  if ([error code] != ECONNREFUSED) {
+    [self reconnect];
+  }
 }
 
 - (void)webSocket:(RCTSRWebSocket *)webSocket didCloseWithCode:(NSInteger)code reason:(NSString *)reason wasClean:(BOOL)wasClean
 {
+  [_delegate reconnectingWebSocketDidClose:self];
   [self reconnect];
 }
 

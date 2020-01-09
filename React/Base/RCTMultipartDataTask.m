@@ -1,10 +1,8 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #import "RCTMultipartDataTask.h"
@@ -13,34 +11,24 @@
 
 @end
 
-// We need this ugly runtime check because [streamTask captureStreams] below fails on iOS version
-// earlier than 9.0. Unfortunately none of the proper ways of checking worked:
-//
-// - NSURLSessionStreamTask class is available and is not Null on iOS 8
-// - [[NSURLSessionStreamTask new] respondsToSelector:@selector(captureStreams)] is always NO
-// - The instance we get in URLSession:dataTask:didBecomeStreamTask: is of __NSCFURLLocalStreamTaskFromDataTask
-//   and it responds to captureStreams on iOS 9+ but doesn't on iOS 8. Which means we can't get direct access
-//   to the streams on iOS 8 and at that point it's too late to change the behavior back to dataTask
-// - The compile-time #ifdef's can't be used because an app compiled for iOS8 can still run on iOS9
-
-static BOOL isStreamTaskSupported() {
-  return [[NSProcessInfo processInfo] isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){9,0,0}];
-}
-
 @implementation RCTMultipartDataTask {
   NSURL *_url;
   RCTMultipartDataTaskCallback _partHandler;
+  RCTMultipartProgressCallback _progressHandler;
   NSInteger _statusCode;
   NSDictionary *_headers;
   NSString *_boundary;
   NSMutableData *_data;
 }
 
-- (instancetype)initWithURL:(NSURL *)url partHandler:(RCTMultipartDataTaskCallback)partHandler
+- (instancetype)initWithURL:(NSURL *)url
+                partHandler:(RCTMultipartDataTaskCallback)partHandler
+            progressHandler:(RCTMultipartProgressCallback)progressHandler
 {
   if (self = [super init]) {
     _url = url;
     _partHandler = [partHandler copy];
+    _progressHandler = [progressHandler copy];
   }
   return self;
 }
@@ -50,9 +38,7 @@ static BOOL isStreamTaskSupported() {
   NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]
                                                         delegate:self delegateQueue:nil];
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:_url];
-  if (isStreamTaskSupported()) {
-    [request addValue:@"multipart/mixed" forHTTPHeaderField:@"Accept"];
-  }
+  [request addValue:@"multipart/mixed" forHTTPHeaderField:@"Accept"];
   NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request];
   [dataTask resume];
   [session finishTasksAndInvalidate];
@@ -117,9 +103,9 @@ didBecomeInputStream:(NSInputStream *)inputStream
   _partHandler = nil;
   NSInteger statusCode = _statusCode;
 
-  BOOL completed = [reader readAllParts:^(NSDictionary *headers, NSData *content, BOOL done) {
+  BOOL completed = [reader readAllPartsWithCompletionCallback:^(NSDictionary *headers, NSData *content, BOOL done) {
     partHandler(statusCode, headers, content, nil, done);
-  }];
+  } progressCallback:_progressHandler];
   if (!completed) {
     partHandler(statusCode, nil, nil, [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil], YES);
   }

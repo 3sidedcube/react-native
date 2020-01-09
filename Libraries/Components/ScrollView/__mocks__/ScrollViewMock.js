@@ -1,30 +1,36 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @format
+ * @flow strict-local
  */
+
+/* eslint-env jest */
+
 'use strict';
 
-const React = require('React');
-const View = require('View');
+const React = require('react');
+const View = require('../../View/View');
 
-const requireNativeComponent = require('requireNativeComponent');
+const requireNativeComponent = require('../../../ReactNative/requireNativeComponent');
 
-const RCTScrollView = requireNativeComponent('RCTScrollView');
+import type {HostComponent} from '../../../Renderer/shims/ReactNativeTypes';
 
-class ScrollViewMock extends React.Component {
-  render() {
+const RCTScrollView: HostComponent<mixed> = requireNativeComponent<mixed>(
+  'RCTScrollView',
+);
+
+const ScrollViewComponent: $FlowFixMe = jest.genMockFromModule('../ScrollView');
+
+class ScrollViewMock extends ScrollViewComponent {
+  render(): React.Element<typeof RCTScrollView> {
     return (
       <RCTScrollView {...this.props}>
         {this.props.refreshControl}
-        <View>
-          {this.props.children}
-        </View>
+        <View>{this.props.children}</View>
       </RCTScrollView>
     );
   }

@@ -1,15 +1,14 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #import <UIKit/UIKit.h>
 
 #import <React/RCTComponent.h>
+#import <yoga/YGEnums.h>
 
 @class RCTShadowView;
 
@@ -24,11 +23,29 @@
 - (void)removeReactSubview:(UIView *)subview NS_REQUIRES_SUPER;
 
 /**
+ * The native id of the view, used to locate view from native codes
+ */
+@property (nonatomic, copy) NSString *nativeID;
+
+/**
+ * Determines whether or not a view should ignore inverted colors or not. Used to set
+ * UIView property accessibilityIgnoresInvertColors in iOS 11+.
+ */
+@property (nonatomic, assign) BOOL shouldAccessibilityIgnoresInvertColors;
+
+/**
  * Layout direction of the view.
  * Internally backed to `semanticContentAttribute` property.
  * Defaults to `LeftToRight` in case of ambiguity.
  */
 @property (nonatomic, assign) UIUserInterfaceLayoutDirection reactLayoutDirection;
+
+/**
+ * Yoga `display` style property. Can be `flex` or `none`.
+ * Defaults to `flex`.
+ * May be used to temporary hide the view in a very efficient way.
+ */
+@property (nonatomic, assign) YGDisplay reactDisplay;
 
 /**
  * The z-index of the view.
@@ -48,15 +65,16 @@
 - (void)didUpdateReactSubviews;
 
 /**
- * Used by the UIIManager to set the view frame.
- * May be overriden to disable animation, etc.
+ * Called each time props have been set.
+ * The default implementation does nothing.
  */
-- (void)reactSetFrame:(CGRect)frame;
+- (void)didSetProps:(NSArray<NSString *> *)changedProps;
 
 /**
- * Used to improve performance when compositing views with translucent content.
+ * Used by the UIIManager to set the view frame.
+ * May be overridden to disable animation, etc.
  */
-- (void)reactSetInheritedBackgroundColor:(UIColor *)inheritedBackgroundColor;
+- (void)reactSetFrame:(CGRect)frame;
 
 /**
  * This method finds and returns the containing view controller for the view.
@@ -89,20 +107,24 @@
 /**
  * The (sub)view which represents this view in terms of accessibility.
  * ViewManager will apply all accessibility properties directly to this view.
- * May be overriten in view subclass which needs to be accessiblitywise
+ * May be overridden in view subclass which needs to be accessiblitywise
  * transparent in favour of some subview.
  * Defaults to `self`.
  */
 @property (nonatomic, readonly) UIView *reactAccessibilityElement;
 
-#if RCT_DEV
+/**
+ * Accessibility properties
+ */
+@property (nonatomic, copy) NSString *accessibilityRole;
+@property (nonatomic, copy) NSDictionary<NSString *, id> *accessibilityState;
+@property (nonatomic, copy) NSArray <NSDictionary *> *accessibilityActions;
+@property (nonatomic, copy) NSDictionary *accessibilityValueInternal;
 
 /**
- Tools for debugging
+ * Used in debugging to get a description of the view hierarchy rooted at
+ * the current view.
  */
-
-@property (nonatomic, strong, setter=_DEBUG_setReactShadowView:) RCTShadowView *_DEBUG_reactShadowView;
-
-#endif
+- (NSString *)react_recursiveDescription;
 
 @end

@@ -1,10 +1,8 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #import "RCTComponentData.h"
@@ -13,20 +11,32 @@
 
 #import "RCTBridge.h"
 #import "RCTBridgeModule.h"
+#import "RCTComponentEvent.h"
 #import "RCTConvert.h"
+#import "RCTParserUtils.h"
 #import "RCTShadowView.h"
 #import "RCTUtils.h"
 #import "UIView+React.h"
 
 typedef void (^RCTPropBlock)(id<RCTComponent> view, id json);
 typedef NSMutableDictionary<NSString *, RCTPropBlock> RCTPropBlockDictionary;
+typedef void (^InterceptorBlock)(NSString *eventName, NSDictionary *event, id sender);
+
+/**
+ * Get the converter function for the specified type
+ */
+static SEL selectorForType(NSString *type)
+{
+  const char *input = type.UTF8String;
+  return NSSelectorFromString([RCTParseType(&input) stringByAppendingString:@":"]);
+}
+
 
 @implementation RCTComponentData
 {
   id<RCTComponent> _defaultView; // Only needed for RCT_CUSTOM_VIEW_PROPERTY
   RCTPropBlockDictionary *_viewPropBlocks;
   RCTPropBlockDictionary *_shadowPropBlocks;
-  BOOL _implementsUIBlockToAmendWithShadowViewRegistry;
   __weak RCTBridge *_bridge;
 }
 
@@ -41,31 +51,7 @@ typedef NSMutableDictionary<NSString *, RCTPropBlock> RCTPropBlockDictionary;
     _viewPropBlocks = [NSMutableDictionary new];
     _shadowPropBlocks = [NSMutableDictionary new];
 
-    // Hackety hack, this partially re-implements RCTBridgeModuleNameForClass
-    // We want to get rid of RCT and RK prefixes, but a lot of JS code still references
-    // view names by prefix. So, while RCTBridgeModuleNameForClass now drops these
-    // prefixes by default, we'll still keep them around here.
-    NSString *name = [managerClass moduleName];
-    if (name.length == 0) {
-      name = NSStringFromClass(managerClass);
-    }
-    if ([name hasPrefix:@"RK"]) {
-      name = [name stringByReplacingCharactersInRange:(NSRange){0, @"RK".length} withString:@"RCT"];
-    }
-    if ([name hasSuffix:@"Manager"]) {
-      name = [name substringToIndex:name.length - @"Manager".length];
-    }
-
-    RCTAssert(name.length, @"Invalid moduleName '%@'", name);
-    _name = name;
-
-    _implementsUIBlockToAmendWithShadowViewRegistry = NO;
-    Class cls = _managerClass;
-    while (cls != [RCTViewManager class]) {
-      _implementsUIBlockToAmendWithShadowViewRegistry = _implementsUIBlockToAmendWithShadowViewRegistry ||
-      RCTClassOverridesInstanceMethod(cls, @selector(uiBlockToAmendWithShadowViewRegistry:));
-      cls = [cls superclass];
-    }
+    _name = moduleNameForClass(managerClass);
   }
   return self;
 }
@@ -80,12 +66,13 @@ typedef NSMutableDictionary<NSString *, RCTPropBlock> RCTPropBlockDictionary;
 
 RCT_NOT_IMPLEMENTED(- (instancetype)init)
 
-- (UIView *)createViewWithTag:(NSNumber *)tag
+- (UIView *)createViewWithTag:(NSNumber *)tag rootTag:(NSNumber *)rootTag
 {
   RCTAssertMainQueue();
 
   UIView *view = [self.manager view];
   view.reactTag = tag;
+  view.rootTag = rootTag;
 #if !TARGET_OS_TV
   view.multipleTouchEnabled = YES;
 #endif
@@ -108,7 +95,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   if (!isShadowView) {
     if (!json && !_defaultView) {
       // Only create default view if json is null
-      _defaultView = [self createViewWithTag:nil];
+      _defaultView = [self createViewWithTag:nil rootTag:nil];
     }
     ((void (*)(id, SEL, id, id, id))objc_msgSend)(self.manager, setter, json, view, _defaultView);
   } else {
@@ -116,7 +103,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
   }
 }
 
-static RCTPropBlock createEventSetter(NSString *propName, SEL setter, RCTBridge *bridge)
+static RCTPropBlock createEventSetter(NSString *propName, SEL setter,InterceptorBlock eventInterceptor, RCTBridge *bridge)
 {
   __weak RCTBridge *weakBridge = bridge;
   return ^(id target, id json) {
@@ -130,12 +117,14 @@ static RCTPropBlock createEventSetter(NSString *propName, SEL setter, RCTBridge 
           return;
         }
 
-        NSMutableDictionary *mutableEvent = [NSMutableDictionary dictionaryWithDictionary:event];
-        mutableEvent[@"target"] = strongTarget.reactTag;
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        [weakBridge.eventDispatcher sendInputEventWithName:RCTNormalizeInputEventName(propName) body:mutableEvent];
-#pragma clang diagnostic pop
+        if (eventInterceptor) {
+          eventInterceptor(propName, event, strongTarget.reactTag);
+        } else {
+          RCTComponentEvent *componentEvent = [[RCTComponentEvent alloc] initWithName:propName
+                                                                              viewTag:strongTarget.reactTag
+                                                                                 body:event];
+          [weakBridge.eventDispatcher sendEvent:componentEvent];
+        }
       };
     }
     ((void (*)(id, SEL, id))objc_msgSend)(target, setter, eventHandler);
@@ -183,6 +172,12 @@ static RCTPropBlock createNSInvocationSetter(NSMethodSignature *typeSignature, S
     if (json) {
       freeValueOnCompletion = YES;
       value = malloc(typeSignature.methodReturnLength);
+      if (!value) {
+        // CWE - 391 : Unchecked error condition
+        // https://www.cvedetails.com/cwe-details/391/Unchecked-Error-Condition.html
+        // https://eli.thegreenplace.net/2009/10/30/handling-out-of-memory-conditions-in-c
+        abort();
+      }
       [typeInvocation setArgument:&json atIndex:2];
       [typeInvocation invoke];
       [typeInvocation getReturnValue:value];
@@ -212,7 +207,7 @@ static RCTPropBlock createNSInvocationSetter(NSMethodSignature *typeSignature, S
   SEL selector = NSSelectorFromString([NSString stringWithFormat:@"propConfig%@_%@", isShadowView ? @"Shadow" : @"", name]);
   if ([_managerClass respondsToSelector:selector]) {
     NSArray<NSString *> *typeAndKeyPath = ((NSArray<NSString *> *(*)(id, SEL))objc_msgSend)(_managerClass, selector);
-    type = RCTConvertSelectorForType(typeAndKeyPath[0]);
+    type = selectorForType(typeAndKeyPath[0]);
     keyPath = typeAndKeyPath.count > 1 ? typeAndKeyPath[1] : nil;
   } else {
     return ^(__unused id view, __unused id json) {};
@@ -255,7 +250,7 @@ static RCTPropBlock createNSInvocationSetter(NSMethodSignature *typeSignature, S
     if (type == NSSelectorFromString(@"RCTBubblingEventBlock:") ||
         type == NSSelectorFromString(@"RCTDirectEventBlock:")) {
       // Special case for event handlers
-      setterBlock = createEventSetter(name, setter, _bridge);
+      setterBlock = createEventSetter(name, setter, self.eventInterceptor, _bridge);
     } else {
       // Ordinary property handlers
       NSMethodSignature *typeSignature = [[RCTConvert class] methodSignatureForSelector:type];
@@ -360,10 +355,6 @@ static RCTPropBlock createNSInvocationSetter(NSMethodSignature *typeSignature, S
   [props enumerateKeysAndObjectsUsingBlock:^(NSString *key, id json, __unused BOOL *stop) {
     [self propBlockForKey:key isShadowView:NO](view, json);
   }];
-
-  if ([view respondsToSelector:@selector(didSetProps:)]) {
-    [view didSetProps:[props allKeys]];
-  }
 }
 
 - (void)setProps:(NSDictionary<NSString *, id> *)props forShadowView:(RCTShadowView *)shadowView
@@ -375,10 +366,6 @@ static RCTPropBlock createNSInvocationSetter(NSMethodSignature *typeSignature, S
   [props enumerateKeysAndObjectsUsingBlock:^(NSString *key, id json, __unused BOOL *stop) {
     [self propBlockForKey:key isShadowView:YES](shadowView, json);
   }];
-
-  if ([shadowView respondsToSelector:@selector(didSetProps:)]) {
-    [shadowView didSetProps:[props allKeys]];
-  }
 }
 
 - (NSDictionary<NSString *, id> *)viewConfig
@@ -439,20 +426,37 @@ static RCTPropBlock createNSInvocationSetter(NSMethodSignature *typeSignature, S
     }
   }
 #endif
-
+  
+  Class superClass = [_managerClass superclass];
+  
   return @{
     @"propTypes": propTypes,
     @"directEvents": directEvents,
     @"bubblingEvents": bubblingEvents,
+    @"baseModuleName": superClass == [NSObject class] ? (id)kCFNull : moduleNameForClass(superClass),
   };
 }
 
-- (RCTViewManagerUIBlock)uiBlockToAmendWithShadowViewRegistry:(NSDictionary<NSNumber *, RCTShadowView *> *)registry
+static NSString *moduleNameForClass(Class managerClass)
 {
-  if (_implementsUIBlockToAmendWithShadowViewRegistry) {
-    return [[self manager] uiBlockToAmendWithShadowViewRegistry:registry];
+  // Hackety hack, this partially re-implements RCTBridgeModuleNameForClass
+  // We want to get rid of RCT and RK prefixes, but a lot of JS code still references
+  // view names by prefix. So, while RCTBridgeModuleNameForClass now drops these
+  // prefixes by default, we'll still keep them around here.
+  NSString *name = [managerClass moduleName];
+  if (name.length == 0) {
+    name = NSStringFromClass(managerClass);
   }
-  return nil;
+  if ([name hasPrefix:@"RK"]) {
+    name = [name stringByReplacingCharactersInRange:(NSRange){0, @"RK".length} withString:@"RCT"];
+  }
+  if ([name hasSuffix:@"Manager"]) {
+    name = [name substringToIndex:name.length - @"Manager".length];
+  }
+  
+  RCTAssert(name.length, @"Invalid moduleName '%@'", name);
+  
+  return name;
 }
 
 @end

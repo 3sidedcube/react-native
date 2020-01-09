@@ -1,11 +1,8 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #import <Foundation/Foundation.h>
@@ -16,12 +13,6 @@
 #import <React/RCTBridge.h>
 #import <React/RCTModuleMethod.h>
 #import <React/RCTRootView.h>
-
-@interface RCTJavaScriptContext : NSObject
-
-@property (nonatomic, assign, readonly) JSGlobalContextRef ctx;
-
-@end
 
 @interface AllocationTestModule : NSObject<RCTBridgeModule, RCTInvalidating>
 
@@ -112,9 +103,7 @@ RCT_EXPORT_METHOD(test:(__unused NSString *)a
   AllocationTestModule *module = [AllocationTestModule new];
   @autoreleasepool {
     RCTBridge *bridge = [[RCTBridge alloc] initWithBundleURL:_bundleURL
-                                              moduleProvider:^{
-                                                return @[module];
-                                              }
+                                              moduleProvider:^{ return @[module]; }
                                                launchOptions:nil];
     XCTAssertTrue(module.isValid, @"AllocationTestModule should be valid");
     (void)bridge;
@@ -130,12 +119,10 @@ RCT_EXPORT_METHOD(test:(__unused NSString *)a
   @autoreleasepool {
     AllocationTestModule *module = [AllocationTestModule new];
     RCTBridge *bridge = [[RCTBridge alloc] initWithBundleURL:_bundleURL
-                                              moduleProvider:^{
-                                                return @[module];
-                                              }
+                                              moduleProvider:^{ return @[module]; }
                                                launchOptions:nil];
+    XCTAssertNotNil(module, @"AllocationTestModule should have been created");
     weakModule = module;
-    XCTAssertNotNil(weakModule, @"AllocationTestModule should have been created");
     (void)bridge;
   }
 
@@ -145,11 +132,18 @@ RCT_EXPORT_METHOD(test:(__unused NSString *)a
 
 - (void)testModuleMethodsAreDeallocated
 {
+  static RCTMethodInfo methodInfo = {
+    .objcName = "test:(NSString *)a :(nonnull NSNumber *)b :(RCTResponseSenderBlock)c :(RCTResponseErrorBlock)d",
+    .jsName = "",
+    .isSync = false
+  };
+
   __weak RCTModuleMethod *weakMethod;
   @autoreleasepool {
-    __autoreleasing RCTModuleMethod *method = [[RCTModuleMethod alloc] initWithMethodSignature:@"test:(NSString *)a :(nonnull NSNumber *)b :(RCTResponseSenderBlock)c :(RCTResponseErrorBlock)d" JSMethodName:@"" isSync:NO moduleClass:[AllocationTestModule class]];
-    weakMethod = method;
+    __autoreleasing RCTModuleMethod *method = [[RCTModuleMethod alloc] initWithExportedMethod:&methodInfo
+                                                                                  moduleClass:[AllocationTestModule class]];
     XCTAssertNotNil(method, @"RCTModuleMethod should have been created");
+    weakMethod = method;
   }
 
   RCT_RUN_RUNLOOP_WHILE(weakMethod)
@@ -172,26 +166,35 @@ RCT_EXPORT_METHOD(test:(__unused NSString *)a
 #if !TARGET_OS_TV // userInteractionEnabled is true for Apple TV views
   XCTAssertFalse(rootContentView.userInteractionEnabled, @"RCTContentView should have been invalidated");
 #endif
-
 }
 
-- (void)testUnderlyingBridgeIsDeallocated
+/**
+ * T42930872:
+ *
+ * Both bridge invalidation and bridge setUp occur execute concurrently.
+ * Therefore, it's not safe for us to create a bridge, and immediately reload on
+ * it. It's also unsafe to just reload the bridge, because that calls invalidate
+ * and then setUp. Because of these race conditions, this test may randomly
+ * crash. Hence, we should disable this test until we either fix the bridge
+ * or delete it.
+ */
+- (void)disabled_testUnderlyingBridgeIsDeallocated
 {
   RCTBridge *bridge;
   __weak id batchedBridge;
   @autoreleasepool {
     bridge = [[RCTBridge alloc] initWithBundleURL:_bundleURL moduleProvider:nil launchOptions:nil];
     batchedBridge = bridge.batchedBridge;
-    XCTAssertTrue([batchedBridge isValid], @"RCTBatchedBridge should be valid");
+    XCTAssertTrue([batchedBridge isValid], @"RCTBridge impl should be valid");
     [bridge reload];
   }
 
   RCT_RUN_RUNLOOP_WHILE(batchedBridge != nil)
 
   XCTAssertNotNil(bridge, @"RCTBridge should not have been deallocated");
-  XCTAssertNil(batchedBridge, @"RCTBatchedBridge should have been deallocated");
+  XCTAssertNil(batchedBridge, @"RCTBridge impl should have been deallocated");
 
-  // Wait to complete the test until the new batchedbridge is also deallocated
+  // Wait to complete the test until the new bridge impl is also deallocated
   @autoreleasepool {
     batchedBridge = bridge.batchedBridge;
     [bridge invalidate];

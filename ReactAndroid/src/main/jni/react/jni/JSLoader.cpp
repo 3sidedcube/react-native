@@ -1,16 +1,23 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #include "JSLoader.h"
 
-#include <folly/Conv.h>
-#include <folly/Memory.h>
 #include <android/asset_manager_jni.h>
+#include <cxxreact/JSBigString.h>
 #include <fb/fbjni.h>
+#include <fb/log.h>
+#include <folly/Conv.h>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <streambuf>
 #include <string>
-#include <fb/log.h>
+
 #ifdef WITH_FBSYSTRACE
 #include <fbsystrace.h>
 using fbsystrace::FbSystraceSection;
@@ -41,7 +48,7 @@ std::unique_ptr<const JSBigString> loadScriptFromAssets(
       assetName.c_str(),
       AASSET_MODE_STREAMING); // Optimized for sequential read: see AssetManager.java for docs
     if (asset) {
-      auto buf = folly::make_unique<JSBigBufferString>(AAsset_getLength(asset));
+      auto buf = std::make_unique<JSBigBufferString>(AAsset_getLength(asset));
       size_t offset = 0;
       int readbytes;
       while ((readbytes = AAsset_read(asset, buf->data() + offset, buf->size() - offset)) > 0) {
@@ -54,8 +61,9 @@ std::unique_ptr<const JSBigString> loadScriptFromAssets(
     }
   }
 
-  throw std::runtime_error(folly::to<std::string>("Unable to load script from assets '", assetName,
-    "'. Make sure your bundle is packaged correctly or you're running a packager server."));
+  throw std::runtime_error(folly::to<std::string>("Unable to load script. Make sure you're "
+    "either running a Metro server (run 'react-native start') or that your bundle '", assetName,
+    "' is packaged correctly for release."));
 }
 
 }}

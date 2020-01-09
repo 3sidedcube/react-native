@@ -1,16 +1,12 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @providesModule FillRateHelper
  * @flow
+ * @format
  */
-
-/* eslint-disable no-console-disallow */
 
 'use strict';
 
@@ -20,19 +16,24 @@ const warning = require('fbjs/lib/warning');
 export type FillRateInfo = Info;
 
 class Info {
-  any_blank_count = 0;
-  any_blank_ms = 0;
-  any_blank_speed_sum = 0;
-  mostly_blank_count = 0;
-  mostly_blank_ms = 0;
-  pixels_blank = 0;
-  pixels_sampled = 0;
-  pixels_scrolled = 0;
-  total_time_spent = 0;
-  sample_count = 0;
+  any_blank_count: number = 0;
+  any_blank_ms: number = 0;
+  any_blank_speed_sum: number = 0;
+  mostly_blank_count: number = 0;
+  mostly_blank_ms: number = 0;
+  pixels_blank: number = 0;
+  pixels_sampled: number = 0;
+  pixels_scrolled: number = 0;
+  total_time_spent: number = 0;
+  sample_count: number = 0;
 }
 
-type FrameMetrics = {inLayout?: boolean, length: number, offset: number};
+type FrameMetrics = {
+  inLayout?: boolean,
+  length: number,
+  offset: number,
+  ...
+};
 
 const DEBUG = false;
 
@@ -57,16 +58,16 @@ class FillRateHelper {
   _samplesStartTime = (null: ?number);
 
   static addListener(
-    callback: (FillRateInfo) => void
-  ): {remove: () => void} {
+    callback: FillRateInfo => void,
+  ): {remove: () => void, ...} {
     warning(
       _sampleRate !== null,
-      'Call `FillRateHelper.setSampleRate` before `addListener`.'
+      'Call `FillRateHelper.setSampleRate` before `addListener`.',
     );
     _listeners.push(callback);
     return {
       remove: () => {
-        _listeners = _listeners.filter((listener) => callback !== listener);
+        _listeners = _listeners.filter(listener => callback !== listener);
       },
     };
   }
@@ -98,7 +99,8 @@ class FillRateHelper {
     }
     const start = this._samplesStartTime; // const for flow
     if (start == null) {
-      DEBUG && console.debug('FillRateHelper: bail on deactivate with no start time');
+      DEBUG &&
+        console.debug('FillRateHelper: bail on deactivate with no start time');
       return;
     }
     if (this._info.sample_count < _minSampleCount) {
@@ -115,10 +117,13 @@ class FillRateHelper {
       const derived = {
         avg_blankness: this._info.pixels_blank / this._info.pixels_sampled,
         avg_speed: this._info.pixels_scrolled / (total_time_spent / 1000),
-        avg_speed_when_any_blank: this._info.any_blank_speed_sum / this._info.any_blank_count,
-        any_blank_per_min: this._info.any_blank_count / (total_time_spent / 1000 / 60),
+        avg_speed_when_any_blank:
+          this._info.any_blank_speed_sum / this._info.any_blank_count,
+        any_blank_per_min:
+          this._info.any_blank_count / (total_time_spent / 1000 / 60),
         any_blank_time_frac: this._info.any_blank_ms / total_time_spent,
-        mostly_blank_per_min: this._info.mostly_blank_count / (total_time_spent / 1000 / 60),
+        mostly_blank_per_min:
+          this._info.mostly_blank_count / (total_time_spent / 1000 / 60),
         mostly_blank_time_frac: this._info.mostly_blank_ms / total_time_spent,
       };
       for (const key in derived) {
@@ -126,28 +131,35 @@ class FillRateHelper {
       }
       console.debug('FillRateHelper deactivateAndFlush: ', {derived, info});
     }
-    _listeners.forEach((listener) => listener(info));
+    _listeners.forEach(listener => listener(info));
     this._resetData();
   }
 
   computeBlankness(
     props: {
-      data: Array<any>,
-      getItemCount: (data: Array<any>) => number,
+      data: any,
+      getItemCount: (data: any) => number,
       initialNumToRender: number,
+      ...
     },
     state: {
       first: number,
       last: number,
+      ...
     },
     scrollMetrics: {
       dOffset: number,
       offset: number,
       velocity: number,
       visibleLength: number,
+      ...
     },
   ): number {
-    if (!this._enabled || props.getItemCount(props.data) === 0 || this._samplesStartTime == null) {
+    if (
+      !this._enabled ||
+      props.getItemCount(props.data) === 0 ||
+      this._samplesStartTime == null
+    ) {
       return 0;
     }
     const {dOffset, offset, velocity, visibleLength} = scrollMetrics;
@@ -180,7 +192,10 @@ class FillRateHelper {
     // Only count blankTop if we aren't rendering the first item, otherwise we will count the header
     // as blank.
     if (firstFrame && first > 0) {
-      blankTop = Math.min(visibleLength, Math.max(0, firstFrame.offset - offset));
+      blankTop = Math.min(
+        visibleLength,
+        Math.max(0, firstFrame.offset - offset),
+      );
     }
     let blankBottom = 0;
     let last = state.last;
@@ -193,7 +208,10 @@ class FillRateHelper {
     // footer as blank.
     if (lastFrame && last < props.getItemCount(props.data) - 1) {
       const bottomEdge = lastFrame.offset + lastFrame.length;
-      blankBottom = Math.min(visibleLength, Math.max(0, offset + visibleLength - bottomEdge));
+      blankBottom = Math.min(
+        visibleLength,
+        Math.max(0, offset + visibleLength - bottomEdge),
+      );
     }
     const pixels_blank = Math.round(blankTop + blankBottom);
     const blankness = pixels_blank / visibleLength;

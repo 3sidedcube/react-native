@@ -1,36 +1,66 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @providesModule parseErrorStack
+ * @format
  * @flow
  */
+
 'use strict';
 
-export type StackFrame = {
-  column: ?number,
-  file: string,
-  lineNumber: number,
-  methodName: string,
+import type {StackFrame} from '../NativeExceptionsManager';
+import type {HermesParsedStack} from './parseHermesStack';
+
+const parseHermesStack = require('./parseHermesStack');
+
+export type ExtendedError = Error & {
+  jsEngine?: string,
+  preventSymbolication?: boolean,
+  componentStack?: string,
+  forceRedbox?: boolean,
+  isComponentError?: boolean,
+  ...
 };
 
-var stacktraceParser = require('stacktrace-parser');
+function convertHermesStack(stack: HermesParsedStack): Array<StackFrame> {
+  const frames = [];
+  for (const entry of stack.entries) {
+    if (entry.type !== 'FRAME') {
+      continue;
+    }
+    const {location, functionName} = entry;
+    if (location.type === 'NATIVE') {
+      continue;
+    }
+    frames.push({
+      methodName: functionName,
+      file: location.sourceUrl,
+      lineNumber: location.line1Based,
+      column:
+        location.type === 'SOURCE'
+          ? location.column1Based - 1
+          : location.virtualOffset0Based,
+    });
+  }
+  return frames;
+}
 
-function parseErrorStack(e: Error): Array<StackFrame> {
+function parseErrorStack(e: ExtendedError): Array<StackFrame> {
   if (!e || !e.stack) {
     return [];
   }
 
-  var stack = Array.isArray(e.stack) ? e.stack : stacktraceParser.parse(e.stack);
-
-  var framesToPop = typeof e.framesToPop === 'number' ? e.framesToPop : 0;
-  while (framesToPop--) {
-    stack.shift();
-  }
+  const stacktraceParser = require('stacktrace-parser');
+  const stack = Array.isArray(e.stack)
+    ? e.stack
+    : global.HermesInternal
+    ? convertHermesStack(parseHermesStack(e.stack))
+    : stacktraceParser.parse(e.stack).map(frame => ({
+        ...frame,
+        column: frame.column != null ? frame.column - 1 : null,
+      }));
 
   return stack;
 }

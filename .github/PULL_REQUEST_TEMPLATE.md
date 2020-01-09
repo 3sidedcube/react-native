@@ -1,32 +1,15 @@
-Thanks for submitting a PR! Please read these instructions carefully:
+<!-- Thanks for submitting a pull request! We appreciate you spending the time to work on these changes. Please provide enough information so that others can review your pull request. The three fields below are mandatory. -->
 
-- [ ] Explain the **motivation** for making this change.
-- [ ] Provide a **test plan** demonstrating that the code is solid.
-- [ ] Match the **code formatting** of the rest of the codebase.
-- [ ] Target the `master` branch, NOT a "stable" branch.
+## Summary
 
-## Motivation (required)
+<!-- Explain the **motivation** for making this change. What existing problem does the pull request solve? -->
 
-What existing problem does the pull request solve?
+## Changelog
 
-## Test Plan (required)
+<!-- Help reviewers and the release process by writing your own changelog entry. See https://github.com/facebook/react-native/wiki/Changelog for an example. -->
 
-A good test plan has the exact commands you ran and their output, provides screenshots or videos if the pull request changes UI or updates the website. See [What is a Test Plan?][1] to learn more.  
+[CATEGORY] [TYPE] - Message
 
-If you have added code that should be tested, add tests.
+## Test Plan
 
-## Next Steps
-
-Sign the [CLA][2], if you haven't already.
-
-Small pull requests are much easier to review and more likely to get merged. Make sure the PR does only one thing, otherwise please split it.
-
-Make sure all **tests pass** on both [Travis][3] and [Circle CI][4]. PRs that break tests are unlikely to be merged.
-
-For more info, see the ["Pull Requests"][5] section of our "Contributing" guidelines.
-
-[1]: https://medium.com/@martinkonicek/what-is-a-test-plan-8bfc840ec171#.y9lcuqqi9
-[2]: https://code.facebook.com/cla
-[3]: https://travis-ci.org/facebook/react-native
-[4]: http://circleci.com/gh/facebook/react-native
-[5]: https://github.com/facebook/react-native/blob/master/CONTRIBUTING.md#pull-requests
+<!-- Demonstrate the code is solid. Example: The exact commands you ran and their output, screenshots / videos if the pull request changes the user interface. -->

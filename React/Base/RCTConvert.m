@@ -1,10 +1,8 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #import "RCTConvert.h"
@@ -68,7 +66,7 @@ RCT_CUSTOM_CONVERTER(NSData *, NSData, [json dataUsingEncoding:NSUTF8StringEncod
   for (NSNumber *number in json) {
     NSInteger index = number.integerValue;
     if (RCT_DEBUG && index < 0) {
-      RCTLogError(@"Invalid index value %zd. Indices must be positive.", index);
+      RCTLogError(@"Invalid index value %lld. Indices must be positive.", (long long)index);
     }
     [indexSet addIndex:index];
   }
@@ -91,7 +89,14 @@ RCT_CUSTOM_CONVERTER(NSData *, NSData, [json dataUsingEncoding:NSUTF8StringEncod
 
     // Check if it has a scheme
     if ([path rangeOfString:@":"].location != NSNotFound) {
-      path = [path stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+      NSMutableCharacterSet *urlAllowedCharacterSet = [NSMutableCharacterSet new];
+      [urlAllowedCharacterSet formUnionWithCharacterSet:[NSCharacterSet URLUserAllowedCharacterSet]];
+      [urlAllowedCharacterSet formUnionWithCharacterSet:[NSCharacterSet URLPasswordAllowedCharacterSet]];
+      [urlAllowedCharacterSet formUnionWithCharacterSet:[NSCharacterSet URLHostAllowedCharacterSet]];
+      [urlAllowedCharacterSet formUnionWithCharacterSet:[NSCharacterSet URLPathAllowedCharacterSet]];
+      [urlAllowedCharacterSet formUnionWithCharacterSet:[NSCharacterSet URLQueryAllowedCharacterSet]];
+      [urlAllowedCharacterSet formUnionWithCharacterSet:[NSCharacterSet URLFragmentAllowedCharacterSet]];
+      path = [path stringByAddingPercentEncodingWithAllowedCharacters:urlAllowedCharacterSet];
       URL = [NSURL URLWithString:path];
       if (URL) {
         return URL;
@@ -222,6 +227,20 @@ RCT_ENUM_CONVERTER(NSURLRequestCachePolicy, (@{
   return nil;
 }
 
++ (NSLocale *)NSLocale:(id)json
+{
+  if ([json isKindOfClass:[NSString class]]) {
+    NSLocale *locale = [[NSLocale alloc] initWithLocaleIdentifier:json];
+    if (!locale) {
+      RCTLogError(@"JSON String '%@' could not be interpreted as a valid locale. ", json);
+    }
+    return locale;
+  } else if (json) {
+    RCTLogConvertError(json, @"a locale");
+  }
+  return nil;
+}
+
 // JS Standard for time is milliseconds
 RCT_CUSTOM_CONVERTER(NSTimeInterval, NSTimeInterval, [self double:json] / 1000.0)
 
@@ -324,21 +343,36 @@ RCT_ENUM_CONVERTER(UITextFieldViewMode, (@{
   @"always": @(UITextFieldViewModeAlways),
 }), UITextFieldViewModeNever, integerValue)
 
-RCT_ENUM_CONVERTER(UIKeyboardType, (@{
-  @"default": @(UIKeyboardTypeDefault),
-  @"ascii-capable": @(UIKeyboardTypeASCIICapable),
-  @"numbers-and-punctuation": @(UIKeyboardTypeNumbersAndPunctuation),
-  @"url": @(UIKeyboardTypeURL),
-  @"number-pad": @(UIKeyboardTypeNumberPad),
-  @"phone-pad": @(UIKeyboardTypePhonePad),
-  @"name-phone-pad": @(UIKeyboardTypeNamePhonePad),
-  @"email-address": @(UIKeyboardTypeEmailAddress),
-  @"decimal-pad": @(UIKeyboardTypeDecimalPad),
-  @"twitter": @(UIKeyboardTypeTwitter),
-  @"web-search": @(UIKeyboardTypeWebSearch),
-  // Added for Android compatibility
-  @"numeric": @(UIKeyboardTypeDecimalPad),
-}), UIKeyboardTypeDefault, integerValue)
++ (UIKeyboardType)UIKeyboardType:(id)json RCT_DYNAMIC
+{
+  static NSDictionary<NSString *, NSNumber *> *mapping;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    NSMutableDictionary<NSString *, NSNumber *> *temporaryMapping = [NSMutableDictionary dictionaryWithDictionary:@{
+          @"default": @(UIKeyboardTypeDefault),
+          @"ascii-capable": @(UIKeyboardTypeASCIICapable),
+          @"numbers-and-punctuation": @(UIKeyboardTypeNumbersAndPunctuation),
+          @"url": @(UIKeyboardTypeURL),
+          @"number-pad": @(UIKeyboardTypeNumberPad),
+          @"phone-pad": @(UIKeyboardTypePhonePad),
+          @"name-phone-pad": @(UIKeyboardTypeNamePhonePad),
+          @"email-address": @(UIKeyboardTypeEmailAddress),
+          @"decimal-pad": @(UIKeyboardTypeDecimalPad),
+          @"twitter": @(UIKeyboardTypeTwitter),
+          @"web-search": @(UIKeyboardTypeWebSearch),
+          // Added for Android compatibility
+          @"numeric": @(UIKeyboardTypeDecimalPad),
+        }];
+    // TODO: T56867629
+    if (@available(iOS 10.0, tvOS 10.0, *)) {
+      temporaryMapping[@"ascii-capable-number-pad"] = @(UIKeyboardTypeASCIICapableNumberPad);
+    }
+    mapping = temporaryMapping;
+  });
+  
+  UIKeyboardType type = RCTConvertEnumValue("UIKeyboardType", mapping, @(UIKeyboardTypeDefault), json).integerValue;
+  return type;
+}
 
 #if !TARGET_OS_TV
 RCT_MULTI_ENUM_CONVERTER(UIDataDetectorTypes, (@{
@@ -349,7 +383,22 @@ RCT_MULTI_ENUM_CONVERTER(UIDataDetectorTypes, (@{
   @"none": @(UIDataDetectorTypeNone),
   @"all": @(UIDataDetectorTypeAll),
 }), UIDataDetectorTypePhoneNumber, unsignedLongLongValue)
-#endif
+
+#if WEBKIT_IOS_10_APIS_AVAILABLE
+RCT_MULTI_ENUM_CONVERTER(WKDataDetectorTypes, (@{
+ @"phoneNumber": @(WKDataDetectorTypePhoneNumber),
+ @"link": @(WKDataDetectorTypeLink),
+ @"address": @(WKDataDetectorTypeAddress),
+ @"calendarEvent": @(WKDataDetectorTypeCalendarEvent),
+ @"trackingNumber": @(WKDataDetectorTypeTrackingNumber),
+ @"flightNumber": @(WKDataDetectorTypeFlightNumber),
+ @"lookupSuggestion": @(WKDataDetectorTypeLookupSuggestion),
+ @"none": @(WKDataDetectorTypeNone),
+ @"all": @(WKDataDetectorTypeAll),
+ }), WKDataDetectorTypePhoneNumber, unsignedLongLongValue)
+ #endif // WEBKIT_IOS_10_APIS_AVAILABLE
+
+ #endif // !TARGET_OS_TV
 
 RCT_ENUM_CONVERTER(UIKeyboardAppearance, (@{
   @"default": @(UIKeyboardAppearanceDefault),
@@ -395,35 +444,25 @@ RCT_ENUM_CONVERTER(UIViewContentMode, (@{
 RCT_ENUM_CONVERTER(UIBarStyle, (@{
   @"default": @(UIBarStyleDefault),
   @"black": @(UIBarStyleBlack),
+  @"blackOpaque": @(UIBarStyleBlackOpaque),
+  @"blackTranslucent": @(UIBarStyleBlackTranslucent),  
 }), UIBarStyleDefault, integerValue)
 #endif
 
-// TODO: normalise the use of w/width so we can do away with the alias values (#6566645)
-static void RCTConvertCGStructValue(const char *type, NSArray *fields, NSDictionary *aliases, CGFloat *result, id json)
+static void convertCGStruct(const char *type, NSArray *fields, CGFloat *result, id json)
 {
   NSUInteger count = fields.count;
   if ([json isKindOfClass:[NSArray class]]) {
     if (RCT_DEBUG && [json count] != count) {
-      RCTLogError(@"Expected array with count %zd, but count is %zd: %@", count, [json count], json);
+      RCTLogError(@"Expected array with count %llu, but count is %llu: %@", (unsigned long long)count, (unsigned long long)[json count], json);
     } else {
       for (NSUInteger i = 0; i < count; i++) {
-        result[i] = [RCTConvert CGFloat:json[i]];
+        result[i] = [RCTConvert CGFloat:RCTNilIfNull(json[i])];
       }
     }
   } else if ([json isKindOfClass:[NSDictionary class]]) {
-    if (aliases.count) {
-      json = [json mutableCopy];
-      for (NSString *alias in aliases) {
-        NSString *key = aliases[alias];
-        NSNumber *number = json[alias];
-        if (number != nil) {
-          RCTLogWarn(@"Using deprecated '%@' property for '%s'. Use '%@' instead.", alias, type, key);
-          ((NSMutableDictionary *)json)[key] = number;
-        }
-      }
-    }
     for (NSUInteger i = 0; i < count; i++) {
-      result[i] = [RCTConvert CGFloat:json[fields[i]]];
+      result[i] = [RCTConvert CGFloat:RCTNilIfNull(json[fields[i]])];
     }
   } else if (json) {
     RCTLogConvertError(json, @(type));
@@ -434,24 +473,25 @@ static void RCTConvertCGStructValue(const char *type, NSArray *fields, NSDiction
  * This macro is used for creating converter functions for structs that consist
  * of a number of CGFloat properties, such as CGPoint, CGRect, etc.
  */
-#define RCT_CGSTRUCT_CONVERTER(type, values, aliases) \
-+ (type)type:(id)json                                 \
-{                                                     \
-  static NSArray *fields;                             \
-  static dispatch_once_t onceToken;                   \
-  dispatch_once(&onceToken, ^{                        \
-    fields = values;                                  \
-  });                                                 \
-  type result;                                        \
-  RCTConvertCGStructValue(#type, fields, aliases, (CGFloat *)&result, json); \
-  return result;                                      \
+#define RCT_CGSTRUCT_CONVERTER(type, values)                \
++ (type)type:(id)json                                       \
+{                                                           \
+  static NSArray *fields;                                   \
+  static dispatch_once_t onceToken;                         \
+  dispatch_once(&onceToken, ^{                              \
+    fields = values;                                        \
+  });                                                       \
+  type result;                                              \
+  convertCGStruct(#type, fields, (CGFloat *)&result, json); \
+  return result;                                            \
 }
 
 RCT_CUSTOM_CONVERTER(CGFloat, CGFloat, [self double:json])
-RCT_CGSTRUCT_CONVERTER(CGPoint, (@[@"x", @"y"]), (@{@"l": @"x", @"t": @"y"}))
-RCT_CGSTRUCT_CONVERTER(CGSize, (@[@"width", @"height"]), (@{@"w": @"width", @"h": @"height"}))
-RCT_CGSTRUCT_CONVERTER(CGRect, (@[@"x", @"y", @"width", @"height"]), (@{@"l": @"x", @"t": @"y", @"w": @"width", @"h": @"height"}))
-RCT_CGSTRUCT_CONVERTER(UIEdgeInsets, (@[@"top", @"left", @"bottom", @"right"]), nil)
+
+RCT_CGSTRUCT_CONVERTER(CGPoint, (@[@"x", @"y"]))
+RCT_CGSTRUCT_CONVERTER(CGSize, (@[@"width", @"height"]))
+RCT_CGSTRUCT_CONVERTER(CGRect, (@[@"x", @"y", @"width", @"height"]))
+RCT_CGSTRUCT_CONVERTER(UIEdgeInsets, (@[@"top", @"left", @"bottom", @"right"]))
 
 RCT_ENUM_CONVERTER(CGLineJoin, (@{
   @"miter": @(kCGLineJoinMiter),
@@ -467,7 +507,7 @@ RCT_ENUM_CONVERTER(CGLineCap, (@{
 
 RCT_CGSTRUCT_CONVERTER(CGAffineTransform, (@[
   @"a", @"b", @"c", @"d", @"tx", @"ty"
-]), nil)
+]))
 
 + (UIColor *)UIColor:(id)json
 {
@@ -543,12 +583,6 @@ NSArray *RCTConvertArrayValue(SEL type, id json)
     }
   }];
   return values;
-}
-
-SEL RCTConvertSelectorForType(NSString *type)
-{
-  const char *input = type.UTF8String;
-  return NSSelectorFromString([RCTParseType(&input) stringByAppendingString:@":"]);
 }
 
 RCT_ARRAY_CONVERTER(NSURL)
@@ -662,7 +696,8 @@ RCT_ENUM_CONVERTER(YGJustify, (@{
   @"flex-end": @(YGJustifyFlexEnd),
   @"center": @(YGJustifyCenter),
   @"space-between": @(YGJustifySpaceBetween),
-  @"space-around": @(YGJustifySpaceAround)
+  @"space-around": @(YGJustifySpaceAround),
+  @"space-evenly": @(YGJustifySpaceEvenly)
 }), YGJustifyFlexStart, intValue)
 
 RCT_ENUM_CONVERTER(YGAlign, (@{
@@ -689,7 +724,8 @@ RCT_ENUM_CONVERTER(YGPositionType, (@{
 
 RCT_ENUM_CONVERTER(YGWrap, (@{
   @"wrap": @(YGWrapWrap),
-  @"nowrap": @(YGWrapNoWrap)
+  @"nowrap": @(YGWrapNoWrap),
+  @"wrap-reverse": @(YGWrapWrapReverse)
 }), YGWrapNoWrap, intValue)
 
 RCT_ENUM_CONVERTER(RCTPointerEvents, (@{
@@ -736,7 +772,7 @@ RCT_ENUM_CONVERTER(RCTAnimationType, (@{
     // thread safe, so we'll pick the lesser of two evils here and block rather
     // than run the risk of crashing
     RCTLogWarn(@"Calling [RCTConvert UIImage:] on a background thread is not recommended");
-    dispatch_sync(dispatch_get_main_queue(), ^{
+    RCTUnsafeExecuteOnMainQueueSync(^{
       image = [self UIImage:json];
     });
     return image;
@@ -745,18 +781,19 @@ RCT_ENUM_CONVERTER(RCTAnimationType, (@{
   NSURL *URL = imageSource.request.URL;
   NSString *scheme = URL.scheme.lowercaseString;
   if ([scheme isEqualToString:@"file"]) {
-    NSString *assetName = RCTBundlePathForURL(URL);
-    image = assetName ? [UIImage imageNamed:assetName] : nil;
+    image = RCTImageFromLocalAssetURL(URL);
+    // There is a case where this may fail when the image is at the bundle location.
+    // RCTImageFromLocalAssetURL only checks for the image in the same location as the jsbundle
+    // Hence, if the bundle is CodePush-ed, it will not be able to find the image.
+    // This check is added here instead of being inside RCTImageFromLocalAssetURL, since
+    // we don't want breaking changes to RCTImageFromLocalAssetURL, which is called in a lot of places
+    // This is a deprecated method, and hence has the least impact on existing code. Basically,
+    // instead of crashing the app, it tries one more location for the image. 
     if (!image) {
-      // Attempt to load from the file system
-      NSString *filePath = URL.path;
-      if (filePath.pathExtension.length == 0) {
-        filePath = [filePath stringByAppendingPathExtension:@"png"];
-      }
-      image = [UIImage imageWithContentsOfFile:filePath];
-      if (!image) {
-        RCTLogConvertError(json, @"an image. File not found.");
-      }
+      image = RCTImageFromLocalBundleAssetURL(URL);
+    }
+    if (!image) {
+      RCTLogConvertError(json, @"an image. File not found.");
     }
   } else if ([scheme isEqualToString:@"data"]) {
     image = [UIImage imageWithData:[NSData dataWithContentsOfURL:URL]];

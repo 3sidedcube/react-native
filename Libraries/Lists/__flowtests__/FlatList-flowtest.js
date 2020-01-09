@@ -1,83 +1,109 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict-local
+ * @format
  */
 
 'use strict';
 
-const FlatList = require('FlatList');
+const FlatList = require('../FlatList');
 const React = require('react');
 
-function renderMyListItem(info: {item: {title: string}, index: number}) {
+function renderMyListItem(info: {
+  item: {title: string, ...},
+  index: number,
+  ...
+}) {
   return <span />;
 }
 
 module.exports = {
-  testEverythingIsFine() {
-    const data = [{
-      title: 'Title Text',
-      key: 1,
-    }];
+  testEverythingIsFine(): React.Node {
+    const data = [
+      {
+        title: 'Title Text',
+        key: 1,
+      },
+    ];
     return <FlatList renderItem={renderMyListItem} data={data} />;
   },
 
-  testBadDataWithTypicalItem() {
-    // $FlowExpectedError - bad title type 6, should be string
-    const data = [{
-      title: 6,
-      key: 1,
-    }];
+  testBadDataWithTypicalItem(): React.Node {
+    const data = [
+      {
+        // $FlowExpectedError - bad title type 6, should be string
+        title: 6,
+        key: 1,
+      },
+    ];
     return <FlatList renderItem={renderMyListItem} data={data} />;
   },
 
-  testMissingFieldWithTypicalItem() {
-    const data = [{
-      key: 1,
-    }];
+  testMissingFieldWithTypicalItem(): React.Node {
+    const data = [
+      {
+        key: 1,
+      },
+    ];
     // $FlowExpectedError - missing title
     return <FlatList renderItem={renderMyListItem} data={data} />;
   },
 
-  testGoodDataWithBadCustomRenderItemFunction() {
-    const data = [{
-      widget: 6,
-      key: 1,
-    }];
+  testGoodDataWithBadCustomRenderItemFunction(): React.Node {
+    const data = [
+      {
+        widget: 6,
+        key: 1,
+      },
+    ];
     return (
       <FlatList
-        renderItem={(info) =>
-          // $FlowExpectedError - bad widgetCount type 6, should be Object
-          <span>{info.item.widget.missingProp}</span>
-        }
+        renderItem={info => (
+          <span>
+            {
+              // $FlowExpectedError - bad widgetCount type 6, should be Object
+              info.item.widget.missingProp
+            }
+          </span>
+        )}
         data={data}
       />
     );
   },
 
-  testBadRenderItemFunction() {
-    const data = [{
-      title: 'foo',
-      key: 1,
-    }];
+  testBadRenderItemFunction(): $TEMPORARY$array<React.Node> {
+    const data = [
+      {
+        title: 'foo',
+        key: 1,
+      },
+    ];
     return [
       // $FlowExpectedError - title should be inside `item`
-      <FlatList renderItem={(info: {title: string}) => <span /> } data={data} />,
-      // $FlowExpectedError - bad index type string, should be number
-      <FlatList renderItem={(info: {item: any, index: string}) => <span /> } data={data} />,
-      // $FlowExpectedError - bad title type number, should be string
-      <FlatList renderItem={(info: {item: {title: number}}) => <span /> } data={data} />,
+      <FlatList renderItem={(info: {title: string}) => <span />} data={data} />,
+      <FlatList
+        // $FlowExpectedError - bad index type string, should be number
+        renderItem={(info: {item: any, index: string}) => <span />}
+        data={data}
+      />,
+      <FlatList
+        // $FlowExpectedError - bad title type number, should be string
+        renderItem={(info: {item: {title: number}}) => <span />}
+        data={data}
+      />,
       // EverythingIsFine
-      <FlatList renderItem={(info: {item: {title: string}}) => <span /> } data={data} />,
+      <FlatList
+        renderItem={(info: {item: {title: string, ...}, ...}) => <span />}
+        data={data}
+      />,
     ];
   },
 
-  testOtherBadProps() {
+  testOtherBadProps(): $TEMPORARY$array<React.Node> {
     return [
       // $FlowExpectedError - bad numColumns type "lots"
       <FlatList renderItem={renderMyListItem} data={[]} numColumns="lots" />,

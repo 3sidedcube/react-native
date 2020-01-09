@@ -1,15 +1,18 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #include "JMessageQueueThread.h"
 
 #include <condition_variable>
 #include <mutex>
 
-#include <fb/log.h>
-#include <folly/Memory.h>
 #include <fb/fbjni.h>
-
-#include <jschelpers/JSCHelpers.h>
+#include <fb/log.h>
+#include <jsi/jsi.h>
 
 #include "JNativeRunnable.h"
 
@@ -29,11 +32,24 @@ struct JavaJSException : jni::JavaClass<JavaJSException, JThrowable> {
 };
 
 std::function<void()> wrapRunnable(std::function<void()>&& runnable) {
-  return [runnable=std::move(runnable)] {
+  return [runnable = std::move(runnable)]() mutable {
+    if (!runnable) {
+      // Runnable is empty, nothing to run.
+      return;
+    }
+
+    auto localRunnable = std::move(runnable);
+
+    // Clearing `runnable` to free all associated resources that stored lambda
+    // might retain.
+    runnable = nullptr;
+
     try {
-      runnable();
-    } catch (const JSException& ex) {
-      throwNewJavaException(JavaJSException::create(ex.what(), ex.getStack().c_str(), ex).get());
+      localRunnable();
+    } catch (const jsi::JSError& ex) {
+      throwNewJavaException(
+          JavaJSException::create(ex.getMessage().c_str(), ex.getStack().c_str(), ex)
+          .get());
     }
   };
 }

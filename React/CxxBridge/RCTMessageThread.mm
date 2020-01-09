@@ -1,10 +1,8 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #include "RCTMessageThread.h"
@@ -14,7 +12,6 @@
 
 #import <React/RCTCxxUtils.h>
 #import <React/RCTUtils.h>
-#include <jschelpers/JSCHelpers.h>
 
 // A note about the implementation: This class is not used
 // generically.  It's a thin wrapper around a run loop which
@@ -39,7 +36,12 @@ RCTMessageThread::~RCTMessageThread() {
 
 // This is analogous to dispatch_async
 void RCTMessageThread::runAsync(std::function<void()> func) {
-  CFRunLoopPerformBlock(m_cfRunLoop, kCFRunLoopCommonModes, ^{ func(); });
+  CFRunLoopPerformBlock(m_cfRunLoop, kCFRunLoopCommonModes, ^{
+    // Create an autorelease pool each run loop to prevent memory footprint from growing too large, which can lead to performance problems.
+    @autoreleasepool {
+      func();
+    }
+  });
   CFRunLoopWakeUp(m_cfRunLoop);
 }
 

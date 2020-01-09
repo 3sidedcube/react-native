@@ -1,19 +1,19 @@
 /**
- * Copyright (c) 2016-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
- * @providesModule Promise
+ * @format
  * @flow
  */
+
 'use strict';
 
-const Promise = require('fbjs/lib/Promise.native');
+const Promise = require('promise/setimmediate/es6-extensions');
 
-const prettyFormat = require('pretty-format');
+require('promise/setimmediate/done');
+require('promise/setimmediate/finally');
 
 if (__DEV__) {
   require('promise/setimmediate/rejection-tracking').enable({
@@ -27,7 +27,11 @@ if (__DEV__) {
         message = Error.prototype.toString.call(error);
         stack = error.stack;
       } else {
-        message = prettyFormat(error);
+        try {
+          message = require('pretty-format')(error);
+        } catch {
+          message = typeof error === 'string' ? error : JSON.stringify(error);
+        }
       }
 
       const warning =
@@ -36,7 +40,7 @@ if (__DEV__) {
         (stack == null ? '' : stack);
       console.warn(warning);
     },
-    onHandled: (id) => {
+    onHandled: id => {
       const warning =
         `Promise Rejection Handled (id: ${id})\n` +
         'This means you can ignore any previous messages of the form ' +

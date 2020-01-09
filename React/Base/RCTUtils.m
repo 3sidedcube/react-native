@@ -1,10 +1,8 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 #import "RCTUtils.h"
@@ -21,8 +19,19 @@
 
 #import "RCTAssert.h"
 #import "RCTLog.h"
+#import <React/RCTUtilsUIOverride.h>
 
 NSString *const RCTErrorUnspecified = @"EUNSPECIFIED";
+
+// Returns the Path of Home directory
+NSString *__nullable RCTHomePath(void);
+
+// Returns the relative path within the Home for an absolute URL
+// (or nil, if the URL does not specify a path within the Home directory)
+NSString *__nullable RCTHomePathForURL(NSURL *__nullable URL);
+
+// Determines if a given image URL refers to a image in Home directory (~)
+BOOL RCTIsHomeAssetURL(NSURL *__nullable imageURL);
 
 static NSString *__nullable _RCTJSONStringifyNoRetry(id __nullable jsonObject, NSError **error)
 {
@@ -264,14 +273,29 @@ void RCTUnsafeExecuteOnMainQueueSync(dispatch_block_t block)
   }
 }
 
+static void RCTUnsafeExecuteOnMainQueueOnceSync(dispatch_once_t *onceToken, dispatch_block_t block)
+{
+  // The solution was borrowed from a post by Ben Alpert:
+  // https://benalpert.com/2014/04/02/dispatch-once-initialization-on-the-main-thread.html
+  // See also: https://www.mikeash.com/pyblog/friday-qa-2014-06-06-secrets-of-dispatch_once.html
+  if (RCTIsMainQueue()) {
+    dispatch_once(onceToken, block);
+  } else {
+    if (DISPATCH_EXPECT(*onceToken == 0L, NO)) {
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        dispatch_once(onceToken, block);
+      });
+    }
+  }
+}
+
 CGFloat RCTScreenScale()
 {
-  static CGFloat scale;
   static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    RCTUnsafeExecuteOnMainQueueSync(^{
-      scale = [UIScreen mainScreen].scale;
-    });
+  static CGFloat scale;
+
+  RCTUnsafeExecuteOnMainQueueOnceSync(&onceToken, ^{
+    scale = [UIScreen mainScreen].scale;
   });
 
   return scale;
@@ -397,7 +421,7 @@ NSDictionary<NSString *, id> *RCTMakeAndLogError(NSString *message,
 
 NSDictionary<NSString *, id> *RCTJSErrorFromNSError(NSError *error)
 {
-  NSString *codeWithDomain = [NSString stringWithFormat:@"E%@%zd", error.domain.uppercaseString, error.code];
+  NSString *codeWithDomain = [NSString stringWithFormat:@"E%@%lld", error.domain.uppercaseString, (long long)error.code];
   return RCTJSErrorFromCodeMessageAndNSError(codeWithDomain,
                                              error.localizedDescription,
                                              error);
@@ -445,8 +469,10 @@ BOOL RCTRunningInTestEnvironment(void)
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     NSDictionary *environment = [[NSProcessInfo processInfo] environment];
-    isTestEnvironment = objc_lookUpClass("SenTestCase") || objc_lookUpClass("XCTest") ||
-      [environment[@"IS_TESTING"] boolValue];
+    isTestEnvironment = objc_lookUpClass("SenTestCase") ||
+    objc_lookUpClass("XCTest") ||
+    objc_lookUpClass("SnapshotTestAppDelegate") ||
+    [environment[@"IS_TESTING"] boolValue];
   });
   return isTestEnvironment;
 }
@@ -476,8 +502,8 @@ UIWindow *__nullable RCTKeyWindow(void)
 
 UIViewController *__nullable RCTPresentedViewController(void)
 {
-  if (RCTRunningInAppExtension()) {
-    return nil;
+  if ([RCTUtilsUIOverride hasPresentedViewController]) {
+    return [RCTUtilsUIOverride presentedViewController];
   }
 
   UIViewController *controller = RCTKeyWindow().rootViewController;
@@ -581,34 +607,84 @@ NSData *__nullable RCTGzipData(NSData *__nullable input, float level)
   return output;
 }
 
-NSString *__nullable RCTBundlePathForURL(NSURL *__nullable URL)
+static NSString *RCTRelativePathForURL(NSString *basePath, NSURL *__nullable URL)
 {
   if (!URL.fileURL) {
     // Not a file path
     return nil;
   }
-  NSString *path = URL.path;
-  NSString *bundlePath = [[NSBundle mainBundle] resourcePath];
-  if (![path hasPrefix:bundlePath]) {
+  NSString *path = [NSString stringWithUTF8String:[URL fileSystemRepresentation]];
+  if (![path hasPrefix:basePath]) {
     // Not a bundle-relative file
     return nil;
   }
-  path = [path substringFromIndex:bundlePath.length];
+  path = [path substringFromIndex:basePath.length];
   if ([path hasPrefix:@"/"]) {
     path = [path substringFromIndex:1];
   }
   return path;
 }
 
+NSString *__nullable RCTLibraryPath(void)
+{
+    static NSString *libraryPath = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        libraryPath = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) lastObject];
+    });
+    return libraryPath;
+}
+
+NSString *__nullable RCTHomePath(void)
+{
+  static NSString *homePath = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    homePath = NSHomeDirectory();
+  });
+  return homePath;
+}
+
+NSString *__nullable RCTBundlePathForURL(NSURL *__nullable URL)
+{
+  return RCTRelativePathForURL([[NSBundle mainBundle] resourcePath], URL);
+
+}
+
+NSString *__nullable RCTLibraryPathForURL(NSURL *__nullable URL)
+{
+  return RCTRelativePathForURL(RCTLibraryPath(), URL);
+}
+
+NSString *__nullable RCTHomePathForURL(NSURL *__nullable URL)
+{
+  return RCTRelativePathForURL(RCTHomePath(), URL);
+}
+
+static BOOL RCTIsImageAssetsPath(NSString *path)
+{
+  NSString *extension = [path pathExtension];
+  return [extension isEqualToString:@"png"] || [extension isEqualToString:@"jpg"];
+}
+
+BOOL RCTIsBundleAssetURL(NSURL *__nullable imageURL)
+{
+  return RCTIsImageAssetsPath(RCTBundlePathForURL(imageURL));
+}
+
+BOOL RCTIsLibraryAssetURL(NSURL *__nullable imageURL)
+{
+  return RCTIsImageAssetsPath(RCTLibraryPathForURL(imageURL));
+}
+
+BOOL RCTIsHomeAssetURL(NSURL *__nullable imageURL)
+{
+  return RCTIsImageAssetsPath(RCTHomePathForURL(imageURL));
+}
+
 BOOL RCTIsLocalAssetURL(NSURL *__nullable imageURL)
 {
-  NSString *name = RCTBundlePathForURL(imageURL);
-  if (!name) {
-    return NO;
-  }
-
-  NSString *extension = [name pathExtension];
-  return [extension isEqualToString:@"png"] || [extension isEqualToString:@"jpg"];
+  return RCTIsBundleAssetURL(imageURL) || RCTIsHomeAssetURL(imageURL);
 }
 
 static NSString *bundleName(NSBundle *bundle)
@@ -641,12 +717,21 @@ static NSBundle *bundleForPath(NSString *key)
   return bundleCache[key];
 }
 
-UIImage *__nullable RCTImageFromLocalAssetURL(NSURL *imageURL)
+UIImage *__nullable RCTImageFromLocalBundleAssetURL(NSURL *imageURL)
 {
-  if (!RCTIsLocalAssetURL(imageURL)) {
+  if (![imageURL.scheme isEqualToString:@"file"]) {
+    // We only want to check for local file assets
     return nil;
   }
+  // Get the bundle URL, and add the image URL
+  // Note that we have to add both host and path, since host is the first "assets" part
+  // while path is the rest of the URL
+  NSURL *bundleImageUrl = [[[NSBundle mainBundle] bundleURL] URLByAppendingPathComponent:[imageURL.host stringByAppendingString:imageURL.path]];
+  return RCTImageFromLocalAssetURL(bundleImageUrl);
+}
 
+UIImage *__nullable RCTImageFromLocalAssetURL(NSURL *imageURL)
+{
   NSString *imageName = RCTBundlePathForURL(imageURL);
 
   NSBundle *bundle = nil;
@@ -659,10 +744,24 @@ UIImage *__nullable RCTImageFromLocalAssetURL(NSURL *imageURL)
   }
 
   UIImage *image = nil;
-  if (bundle) {
-    image = [UIImage imageNamed:imageName inBundle:bundle compatibleWithTraitCollection:nil];
-  } else {
-    image = [UIImage imageNamed:imageName];
+  if (imageName) {
+    if (bundle) {
+      image = [UIImage imageNamed:imageName inBundle:bundle compatibleWithTraitCollection:nil];
+    } else {
+      image = [UIImage imageNamed:imageName];
+    }
+  }
+
+  if (!image) {
+    // Attempt to load from the file system
+    const char* fileSystemCString = [imageURL fileSystemRepresentation];
+    if (fileSystemCString != NULL) {
+      NSString *filePath = [NSString stringWithUTF8String:fileSystemCString];
+      if (filePath.pathExtension.length == 0) {
+        filePath = [filePath stringByAppendingPathExtension:@"png"];
+      }
+      image = [UIImage imageWithContentsOfFile:filePath];
+    }
   }
 
   if (!image && !bundle) {
@@ -680,7 +779,6 @@ UIImage *__nullable RCTImageFromLocalAssetURL(NSURL *imageURL)
       }
     }
   }
-
   return image;
 }
 
@@ -757,9 +855,11 @@ static void RCTGetRGBAColorComponents(CGColorRef color, CGFloat rgba[4])
     case kCGColorSpaceModelLab:
     case kCGColorSpaceModelPattern:
     case kCGColorSpaceModelUnknown:
+    // TODO: kCGColorSpaceModelXYZ should be added sometime after Xcode 10 release.
+    default:
     {
 
-#ifdef RCT_DEBUG
+#if RCT_DEBUG
       //unsupported format
       RCTLogError(@"Unsupported color model: %i", model);
 #endif
@@ -793,6 +893,22 @@ NSString *RCTUIKitLocalizedString(NSString *string)
 {
   NSBundle *UIKitBundle = [NSBundle bundleForClass:[UIApplication class]];
   return UIKitBundle ? [UIKitBundle localizedStringForKey:string value:string table:nil] : string;
+}
+
+NSString  *RCTHumanReadableType(NSObject *obj)
+{
+  if ([obj isKindOfClass:[NSString class]]) {
+    return @"string";
+  } else if ([obj isKindOfClass:[NSNumber class]]) {
+    int intVal = [(NSNumber *)obj intValue];
+    if(intVal == 0 || intVal == 1) {
+      return @"boolean or number";
+    }
+
+    return @"number";
+  } else {
+    return NSStringFromClass([obj class]);
+  }
 }
 
 NSString *__nullable RCTGetURLQueryParam(NSURL *__nullable URL, NSString *param)
@@ -848,4 +964,39 @@ NSURL *__nullable RCTURLByReplacingQueryParam(NSURL *__nullable URL, NSString *p
   }
   components.queryItems = queryItems;
   return components.URL;
+}
+
+RCT_EXTERN NSString *RCTDropReactPrefixes(NSString *s)
+{
+  if ([s hasPrefix:@"RK"]) {
+    return [s substringFromIndex:2];
+  } else if ([s hasPrefix:@"RCT"]) {
+    return [s substringFromIndex:3];
+  }
+
+  return s;
+}
+
+RCT_EXTERN BOOL RCTUIManagerTypeForTagIsFabric(NSNumber *reactTag)
+{
+  // See https://github.com/facebook/react/pull/12587
+  return [reactTag integerValue] % 2 == 0;
+}
+
+RCT_EXTERN BOOL RCTValidateTypeOfViewCommandArgument(NSObject *obj, id expectedClass, NSString const * expectedType, NSString const *componentName, NSString const * commandName, NSString const * argPos)
+{
+  if (![obj isKindOfClass:expectedClass]) {
+    NSString *kindOfClass = RCTHumanReadableType(obj);
+
+    RCTLogError(
+                @"%@ command %@ received %@ argument of type %@, expected %@.",
+                componentName,
+                commandName,
+                argPos,
+                kindOfClass,
+                expectedType);
+    return false;
+  }
+
+  return true;
 }
