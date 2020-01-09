@@ -166,7 +166,7 @@ static UIFont *cachedSystemFont(CGFloat size, RCTFontWeight weight)
                   withFamily:[RCTConvert NSString:json[@"fontFamily"]]
                         size:[RCTConvert NSNumber:json[@"fontSize"]]
                       weight:[RCTConvert NSString:json[@"fontWeight"]]
-                   condensed:[RCTConvert BOOL:json[@"fontCondensed"]]
+                   condensed:[RCTConvert NSNumber:json[@"fontCondensed"]]
                        style:[RCTConvert NSString:json[@"fontStyle"]]
                      variant:[RCTConvert NSStringArray:json[@"fontVariant"]]
              scaleMultiplier:1];
@@ -240,7 +240,7 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
             withFamily:(NSString *)family
                   size:(NSNumber *)size
                 weight:(NSString *)weight
-             condensed:(BOOL)condensed
+             condensed:(NSNumber *)condensed
                  style:(NSString *)style
                variant:(NSArray<RCTFontVariantDescriptor *> *)variant
        scaleMultiplier:(CGFloat)scaleMultiplier
@@ -259,7 +259,7 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
   RCTFontWeight fontWeight = defaultFontWeight;
   NSString *familyName = defaultFontFamily;
   BOOL isItalic = NO;
-  BOOL isCondensed = condensed;
+  BOOL isCondensed = NO;
 
   if (font) {
     familyName = font.familyName ?: defaultFontFamily;
@@ -277,6 +277,7 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
   familyName = [RCTConvert NSString:family] ?: familyName;
   isItalic = style ? [RCTConvert RCTFontStyle:style] : isItalic;
   fontWeight = weight ? [RCTConvert RCTFontWeight:weight] : fontWeight;
+  isCondensed = condensed ? [RCTConvert BOOL:condensed] : isCondensed;
 
   BOOL didFindFont = NO;
 
@@ -312,7 +313,7 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
       familyName = font.familyName;
       fontWeight = weight ? fontWeight : weightOfFont(font);
       isItalic = style ? isItalic : isItalicFont(font);
-      isCondensed = isCondensedFont(font);
+      isCondensed = condensed ? isCondensed : isCondensedFont(font);
     } else {
       // Not a valid font or family
       RCTLogError(@"Unrecognized font family '%@'", familyName);
@@ -363,22 +364,22 @@ RCT_ARRAY_CONVERTER(RCTFontVariantDescriptor)
 
 + (UIFont *)updateFont:(UIFont *)font withFamily:(NSString *)family
 {
-  return [self updateFont:font withFamily:family size:nil weight:nil condensed:false style:nil variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:family size:nil weight:nil condensed:nil style:nil variant:nil scaleMultiplier:1];
 }
 
 + (UIFont *)updateFont:(UIFont *)font withSize:(NSNumber *)size
 {
-  return [self updateFont:font withFamily:nil size:size weight:nil condensed:false style:nil variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:nil size:size weight:nil condensed:nil style:nil variant:nil scaleMultiplier:1];
 }
 
 + (UIFont *)updateFont:(UIFont *)font withWeight:(NSString *)weight
 {
-  return [self updateFont:font withFamily:nil size:nil weight:weight condensed:false style:nil variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:nil size:nil weight:weight condensed:nil style:nil variant:nil scaleMultiplier:1];
 }
 
 + (UIFont *)updateFont:(UIFont *)font withStyle:(NSString *)style
 {
-  return [self updateFont:font withFamily:nil size:nil weight:nil condensed:false style:style variant:nil scaleMultiplier:1];
+  return [self updateFont:font withFamily:nil size:nil weight:nil condensed:nil style:style variant:nil scaleMultiplier:1];
 }
 
 @end
