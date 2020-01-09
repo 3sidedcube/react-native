@@ -31,7 +31,7 @@ RCT_EXTERN BOOL RCTHasFontHandlerSet(void);
             withFamily:(NSString *)family
                   size:(NSNumber *)size
                 weight:(NSString *)weight
-             condensed:(BOOL)condensed
+             condensed:(NSNumber *)condensed
                  style:(NSString *)style
                variant:(NSArray<NSString *> *)variant
        scaleMultiplier:(CGFloat)scaleMultiplier;
