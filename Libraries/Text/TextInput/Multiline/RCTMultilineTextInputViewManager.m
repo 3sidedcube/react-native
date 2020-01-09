@@ -8,10 +8,15 @@
 #import <React/RCTMultilineTextInputViewManager.h>
 
 #import <React/RCTMultilineTextInputView.h>
+#import "RCTTextAttributes.h"
 
 @implementation RCTMultilineTextInputViewManager
 
 RCT_EXPORT_MODULE()
+
+RCT_CUSTOM_SHADOW_PROPERTY(fontCondensed, BOOL, RCTMultilineTextInputView) {
+  view.textAttributes.fontCondensed = [NSNumber numberWithBool: [RCTConvert BOOL:json]];
+}
 
 - (UIView *)view
 {

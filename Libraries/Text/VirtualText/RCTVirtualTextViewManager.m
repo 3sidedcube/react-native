@@ -13,6 +13,10 @@
 
 RCT_EXPORT_MODULE(RCTVirtualText)
 
+RCT_CUSTOM_SHADOW_PROPERTY(fontCondensed, BOOL, RCTVirtualTextShadowView) {
+  view.textAttributes.fontCondensed = [NSNumber numberWithBool: [RCTConvert BOOL:json]];
+}
+
 - (UIView *)view
 {
   return [UIView new];

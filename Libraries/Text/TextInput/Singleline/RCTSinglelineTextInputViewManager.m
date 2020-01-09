@@ -14,6 +14,10 @@
 
 RCT_EXPORT_MODULE()
 
+RCT_CUSTOM_SHADOW_PROPERTY(fontCondensed, BOOL, RCTSinglelineTextInputView) {
+  view.textAttributes.fontCondensed = [NSNumber numberWithBool: [RCTConvert BOOL:json]];
+}
+
 - (RCTShadowView *)shadowView
 {
   RCTBaseTextInputShadowView *shadowView =

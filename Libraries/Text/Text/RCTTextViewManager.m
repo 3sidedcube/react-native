@@ -32,6 +32,10 @@ RCT_REMAP_SHADOW_PROPERTY(ellipsizeMode, lineBreakMode, NSLineBreakMode)
 RCT_REMAP_SHADOW_PROPERTY(adjustsFontSizeToFit, adjustsFontSizeToFit, BOOL)
 RCT_REMAP_SHADOW_PROPERTY(minimumFontScale, minimumFontScale, CGFloat)
 
+RCT_CUSTOM_SHADOW_PROPERTY(fontCondensed, BOOL, RCTTextShadowView) {
+  view.textAttributes.fontCondensed = [NSNumber numberWithBool: [RCTConvert BOOL:json]];
+}
+
 RCT_EXPORT_SHADOW_PROPERTY(onTextLayout, RCTDirectEventBlock)
 
 RCT_EXPORT_VIEW_PROPERTY(selectable, BOOL)
